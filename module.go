@@ -24,7 +24,7 @@ import (
 
 func init() {
 	//caddy.RegisterModule(new(LL))
-	caddy.RegisterNetwork("multiaddr", registerMultiaddrURI)
+	caddy.RegisterNetwork("multiaddr:", registerMultiaddrURI)
 }
 
 func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.ListenConfig) (any, error) {
@@ -33,7 +33,7 @@ func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.Lis
 		return nil, fmt.Errorf("context is not a caddy.Context: %T", ctx)
 	}
 
-	if network != "multiaddr" {
+	if network != "multiaddr:" {
 		return nil, fmt.Errorf("multiaddr URI network only handles multiaddr URIs")
 	}
 
@@ -48,7 +48,7 @@ func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.Lis
 	}
 	addr = addr[:lastColon]
 
-	ma, err := multiaddr.NewMultiaddr(addr)
+	ma, err := multiaddr.NewMultiaddr("/" + addr)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse multiaddr: %w", err)
 	}
