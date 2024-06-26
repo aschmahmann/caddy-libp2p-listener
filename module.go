@@ -6,26 +6,98 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/routing"
 	libp2phttp "github.com/libp2p/go-libp2p/p2p/http"
 	"github.com/libp2p/go-libp2p/p2p/net/gostream"
 	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
 	"github.com/multiformats/go-multiaddr"
-	"net"
-	"os"
-	"strconv"
-	"strings"
 )
 
 func init() {
-	//caddy.RegisterModule(new(LL))
 	caddy.RegisterNetwork("multiaddr:", registerMultiaddrURI)
+	caddy.RegisterModule(&Libp2pHandler{})
+	httpcaddyfile.RegisterHandlerDirective("well_known-libp2p", parseCaddyfile)
 }
+
+type Libp2pHandler struct {
+	h               libp2phttp.Host
+	ParsedProtosMap map[protocol.ID]libp2phttp.ProtocolMeta
+}
+
+// Provision implements caddy.Provisioner.
+func (l *Libp2pHandler) Provision(caddy.Context) error {
+	for k, v := range l.ParsedProtosMap {
+		l.h.WellKnownHandler.AddProtocolMeta(k, v)
+	}
+	return nil
+}
+
+// UnmarshalCaddyfile implements caddyfile.Unmarshaler.
+func (l *Libp2pHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	l.ParsedProtosMap = make(map[protocol.ID]libp2phttp.ProtocolMeta)
+	d.Next() // Enter the block in well_known-libp2p
+	for d.NextBlock(0) {
+		key := d.Val()
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		t := d.Val()
+		if t != "=>" {
+			return d.Err("expected =>")
+		}
+		if !d.NextArg() {
+			return d.ArgErr()
+		}
+		value := d.Val()
+		l.ParsedProtosMap[protocol.ID(key)] = libp2phttp.ProtocolMeta{Path: value}
+	}
+	return nil
+}
+
+// ServeHTTP implements caddyhttp.MiddlewareHandler.
+func (l *Libp2pHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	if r.URL.Path == libp2phttp.WellKnownProtocols {
+		l.h.WellKnownHandler.ServeHTTP(w, r)
+		return nil
+	}
+	return next.ServeHTTP(w, r)
+}
+
+// CaddyModule implements caddy.Module.
+func (l *Libp2pHandler) CaddyModule() caddy.ModuleInfo {
+	return caddy.ModuleInfo{
+		ID:  "http.handlers.well_known-libp2p",
+		New: func() caddy.Module { return new(Libp2pHandler) },
+	}
+}
+
+// parseCaddyfile unmarshals a caddyfile helper to a Middleware.
+func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+	var m Libp2pHandler
+	err := m.UnmarshalCaddyfile(h.Dispenser)
+	return &m, err
+}
+
+var _ caddy.Module = (*Libp2pHandler)(nil)
+
+var _ caddyhttp.MiddlewareHandler = (*Libp2pHandler)(nil)
+var _ caddyfile.Unmarshaler = (*Libp2pHandler)(nil)
+var _ caddy.Provisioner = (*Libp2pHandler)(nil)
 
 func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.ListenConfig) (any, error) {
 	cctx, ok := ctx.(caddy.Context)
@@ -124,7 +196,7 @@ func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.Lis
 	fmt.Println(h.ID())
 	fmt.Println(h.Addrs())
 
-	return gostream.Listen(h, libp2phttp.ProtocolIDForMultistreamSelect)
+	return gostream.Listen(h, libp2phttp.ProtocolIDForMultistreamSelect, gostream.IgnoreEOF())
 }
 
 /*

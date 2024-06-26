@@ -1,0 +1,31 @@
+{
+	auto_https off
+	servers {
+		protocols h1 h2
+	}
+	libp2p {
+		# private_key ed25519key.pem
+		advertise_amino true
+	}
+}
+
+:4002 {
+	# Site-specific options
+	bind multiaddr:/ip4/0.0.0.0/udp/4002/quic-v1/webtransport
+	bind 127.0.0.1
+	bind ::1
+
+    handle / {
+        respond "Hello World"
+    }
+
+	route /.well-known/libp2p/* {
+		well_known-libp2p {
+            # Tell peers where our protocols are mounted
+			/hello/0.0.1 => /
+		}
+	}
+
+
+	respond "I am 4002"
+}
