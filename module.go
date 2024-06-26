@@ -93,11 +93,12 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 	return &m, err
 }
 
-var _ caddy.Module = (*Libp2pHandler)(nil)
-
-var _ caddyhttp.MiddlewareHandler = (*Libp2pHandler)(nil)
-var _ caddyfile.Unmarshaler = (*Libp2pHandler)(nil)
-var _ caddy.Provisioner = (*Libp2pHandler)(nil)
+var (
+	_ caddy.Module                = (*Libp2pHandler)(nil)
+	_ caddyhttp.MiddlewareHandler = (*Libp2pHandler)(nil)
+	_ caddyfile.Unmarshaler       = (*Libp2pHandler)(nil)
+	_ caddy.Provisioner           = (*Libp2pHandler)(nil)
+)
 
 func registerMultiaddrURI(ctx context.Context, network, addr string, cfg net.ListenConfig) (any, error) {
 	cctx, ok := ctx.(caddy.Context)
